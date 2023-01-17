@@ -18,7 +18,7 @@
 
 ​	现在，您将手动执行与浏览器相同的操作。
 
-![](C:\Users\13978\.ssh\lab0\main\note\picture\v2-e5427c1e9ad8aaad99d643e7bd7e927b_r.jpg)
+![]((https://github.com/wannan123/CS144/blob/main/lab0/main/note/picture/v2-e5427c1e9ad8aaad99d643e7bd7e927b_r.jpg))
 
 13213
 
