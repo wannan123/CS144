@@ -3,7 +3,7 @@
 
 #include <cstdlib>
 #include <iostream>
-//good job
+
 using namespace std;
 
 
@@ -26,7 +26,7 @@ void get_URL(const string &host, const string &path) {
         cout<<sock1.read();
     }
     sock1.close();
-
+    
 
     cerr << "Function called: get_URL(" << host << ", " << path << ").\n";
     cerr << "Warning: get_URL() has not been implemented yet.\n";
