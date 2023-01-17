@@ -14,6 +14,7 @@
 
 ​	这一部分就按照指导书上一步一步来就好啦
 
-		1. 在 Web 浏览器中，访问 http://cs144.keithw.org/hello 并观察结果。//你会看到Hello CS144!
-  		2. 现在，您将手动执行与浏览器相同的操作。
-  		3. ![]()
+	1. 在 Web 浏览器中，访问 http://cs144.keithw.org/hello 并观察结果。//你会看到Hello CS144!
+ 	2. 现在，您将手动执行与浏览器相同的操作。
+ 	3. ![](C:\Users\13978\.ssh\lab0\main\note\picture\v2-e5427c1e9ad8aaad99d643e7bd7e927b_r.jpg)
+
