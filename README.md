@@ -1,5 +1,5 @@
 # Welecometo wannan's Study for CS144！
-此次我们来学习Stanford的CS144，我在上学期学习完HIT的OS之后并完成相应的lab实验也是颇有感触，由于这学期我们学校学习Network，所以我们来会一会CS144，本次实验相当有意思，本次学习，因为Stanford的两位教授实在有点让我听不进去（English is very "poor"~）。我就选择和USTC跟踪学习，让我们来看看我们在本次实验需要干什么吧~
+此次我们来学习Stanford的CS144，我在上学期学习完HIT的OS之后并完成相应的lab实验也是颇有感触，由于这学期我们学校学习Network，所以我们来会一会CS144，本次实验相当有意思，本次学习，因为Stanford的两位教授实在有点让我听不进去，我就选择和USTC跟踪学习，让我们来看看我们在本次实验需要干什么吧~
 
 ![image-20230124214052262](https://github.com/wannan123/CS144/blob/main/blob/main/lab0/main/note/picture/image-20230124214052262.png)
 
