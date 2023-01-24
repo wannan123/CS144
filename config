@@ -1,5 +1,0 @@
-# Read more about SSH config files: https://linux.die.net/man/5/ssh_config
-Host wuchengen
-    HostName 192.168.150.129
-    User wuchengen
-    
