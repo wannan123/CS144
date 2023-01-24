@@ -1,9 +1,7 @@
 # CS144
 Welecometo wannan's Study for CS144！
 
-此次我们来学习Stanford的CS144，我在上学期学习完HIT的OS之后并完成相应的lab实验也是颇有感触，由于这学期我们学校学习Network，所以我们来会一会CS144，本次实验相当有意思，本次学习，因为Stanford的两位教授实在有点让我听不进去（English is very "poor"~），我就选择和USTC跟踪学习，
-
-本次实验还是很有意思的，它实现了一个完整的TCP/IP让我了解到底层的设计原理，另一方面在我对C++和git的学习也有所提升，让我们来看看我们在本次实验需要干什么吧~
+此次我们来学习Stanford的CS144，我在上学期学习完HIT的OS之后并完成相应的lab实验也是颇有感触，由于这学期我们学校学习Network，所以我们来会一会CS144，本次实验相当有意思，本次学习，因为Stanford的两位教授实在有点让我听不进去（English is very "poor"~），我就选择和USTC跟踪学习，让我们来看看我们在本次实验需要干什么吧~
 
 ![image-20230124214052262](https://github.com/wannan123/CS144/blob/main/blob/main/lab0/main/note/picture/image-20230124214052262.png)
 
@@ -14,3 +12,5 @@ Welecometo wannan's Study for CS144！
 2. 在实验室2中，您将实现TCP中处理入站字节流的部分：TCPReceiver。这需要考虑TCP将如何表示流中的每个字节的位置，称为“序列号”。TCPReceiver负责告诉发送方（a）它能够成功组装多少入站字节流（这称为“确认”）和（b）发送方现在可以发送多少字节（“流控制”）。
 3. 在实验室3中，您将实现TCP中处理出站字节流的部分：TCPSender。当发送方怀疑其传输的某个片段在传输过程中丢失，并且从未到达接收方时，该如何应对？它应该在何时重试并重新传输丢失的段？
 4. 在实验室4中，您将结合前面的工作创建一个工作的TCP实现：一个包含TCPSender和TCPReceiver的TCPConnection。您将使用此功能与世界各地的真实服务器进行对话。
+
+本次实验还是很有意思的，它实现了一个完整的TCP/IP让我了解到底层的设计原理，另一方面在我对C++和git的学习也有所提升。
