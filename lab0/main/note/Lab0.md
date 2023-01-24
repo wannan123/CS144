@@ -376,3 +376,4 @@ size_t ByteStream::remaining_capacity() const { return stream_len-stream.size();
 
 ```
 
+![](https://github.com/wannan123/CS144/blob/main/blob/main/lab0/main/note/picture/wallhaven-eox6jk-1674546755768.jpg)
