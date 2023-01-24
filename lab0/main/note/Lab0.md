@@ -376,4 +376,3 @@ size_t ByteStream::remaining_capacity() const { return stream_len-stream.size();
 
 ```
 
-![](https://cdn.jsdelivr.net/gh/wannan123/CS144/lab0/main/note/picture/lab0/main/note/picture/2.jpg)
