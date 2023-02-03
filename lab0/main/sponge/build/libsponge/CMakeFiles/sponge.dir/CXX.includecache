@@ -1,0 +1,18 @@
+#IncludeRegexLine: ^[ 	]*[#%][ 	]*(include|import)[ 	]*[<"]([^">]+)([">])
+
+#IncludeRegexScan: ^.*$
+
+#IncludeRegexComplain: ^$
+
+#IncludeRegexTransform: 
+
+/home/wuchengen/Desktop/CS144/lab0/main/sponge/libsponge/byte_stream.cc
+byte_stream.hh
+/home/wuchengen/Desktop/CS144/lab0/main/sponge/libsponge/byte_stream.hh
+
+/home/wuchengen/Desktop/CS144/lab0/main/sponge/libsponge/byte_stream.hh
+deque
+-
+string
+-
+
