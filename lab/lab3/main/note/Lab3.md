@@ -1,155 +1,264 @@
-# Lab2（the TCP receiver）
+
+
+# Lab3（the TCP sender）
 
 
 
-OK！完成Lab2啦，本次实验用时3天，在这一周内补完了第三章传输层的理论知识，本次实验主要是实现了一个TCP接收器，它结合了前两次实验：ByteStream和重组器，对它两进行一个上层分装，我们还是来看看总体图：
+omg，终于做完lab3了，lab3真的是一个难度的大跳跃，整个难度一下子就上来了，本次实验用时大概有5天的时间，从读文档到最后完成lab，真的是一段艰难的旅途。本次实验的文档让人很难理解，就是读完其实也是很模糊它到底想让我们实现什么内容，所以让我花费的时间很多，大概足足有2天半的时间来读文档和思考，不像之前的实验读完就比较好理解到底是想做什么，本次实验我也是在写代码前做了很多思维导图，去整理逻辑。在改bug的时候也是异常艰难，我感觉不能再单纯的是用cerr了，得找个时间好好学习一下gdb或者其他调试工具。总之这次的实验让我非常头疼hhh不过想到lab4会更难，我还是坚持了下来！还是先看看总体图吧！：
 
 ![image-20230124214052262](https://github.com/wannan123/CS144/blob/main/blob/main/lab0/main/note/picture/image-20230124214052262.png)
 
-我们可以看到Receiver是在重组器之上的，所以我们这个实验的总体思路是Reciever接收到乱序的段然后塞给重组器最后写入内存中，本次实验还是有点难度，值得思考的（对于我这个小白来说~）那么我们开启Lab2的欢快之旅吧！
+我们这次实验是实现一个TCP Sender，也就是发送器，其中也有两大难点：
 
+* 重发计时器的启动，关闭，重启，判断超时。
+* 理解Sender的工作流程以及原理。
 
+那么我们开启Lab3之旅吧！
 
-## 1. 64位索引和32位索引的转化（Translating）
+## 1.实现重发计时器
 
+首先要理解文档里的重发计时器到底是怎么工作的，一开始我也很纳闷如果不用系统时间函数那怎么记时呢？随着看完他的函数申明后，是给一个*ms_since_last_tick*d 的参数的，也就是测试用例会时不时的调用tick函数给一个距离上次调用这个函数的时间，也就是说测试用例会给你一个数字，代表过去的时间。根据文档的建议，我将它封装成一个time_类，然后实现它的功能。
 
+第二点我们要知道重发计时器有什么用：我们知道报文在传输的时候会遇到各种困难，有可能会丢失，为了解决这个问题我们需要重新发送报文，但是这个重新发送需要有一定的限制，它的时间阈值是动态的，每当超过这个阈值sender还没有收到receiver的ack时我们需要重新发送之前的报文。在一开始会认为是每次发送一段segment都要记录一下，其实不然。本实验的意思就是记录最初没有收到ack的报文，当收到报文的ack时重新发送这段数据包就可以啦，其次是这个动态阈值是如何变化的，为何变化的：因为网络的拥堵不是定值，只要发生一次需要重传，我们都需要将阈值扩大，因为既然发生了拥堵，就说明我们需要多等待一会儿。
 
-我们先上TCP段图:
-
-![image-20230204000755747](https://github.com/wannan123/CS144/blob/main/blob/main/lab0/main/note/picture/image-20230204000755747.png)
-
-可以看到第二行是序号（Sequno），代表着这一段的序号，我们在Lab1中有用到每一次发来字符段的索引，那个索引就是用序号转化过来的，当然，我们不可能直接将seqno拿过来当index，因为在TCP生成序号的时候，初始序号（SYN）是32位的一个随机数，这样保证了TCP接收多个sender传来的segment的时候造成的混乱，所以给每个sender都随机生成一个数字。但是我们不能直接拿这个随机数来当索引，要不然太麻烦了，所以我们想把它转化一下，也就是所谓的标准化，这样方便重组。
-
-因为32位序号包含的范围不是很大，所以TCP的序号它采用一种环形的序号组，也就是如果越界的时候就从头开始。但是我们的index可不想这样做，所以我们采用64位编码方式，理解了这个我们看看它的大致样子：
-
-![image-20230204001616541](https://github.com/wannan123/CS144/blob/main/blob/main/lab0/main/note/picture/image-20230204001616541.png)
-
-我们接收到的是seqno，我们需要将它转化为absolute seqno，因为index只需要加一，所以不需要管。我们需要实现两个函数： **wrap** 和 **unwrap** 
-
-
-
-* **wrap() ：**      
-
-    Convert absolute seqno → seqno，这个相当比较轻松，我们只需要将absolute seqno加上seqno的初始序号（SYN）再对对2的32次方取余，即可得到seqno，因为seqno是环形的，所以取余即可
-
-    ```c++
-    WrappingInt32 wrap(uint64_t n, WrappingInt32 isn) {
-        DUMMY_CODE(n, isn);
-        uint64_t t=isn.raw_value()+n;
-        uint32_t seqno=t % (1ul << 32);
-        //uint32_t temp=static_cast<uint32_t>(t);
-        return WrappingInt32{seqno};
-    }
-    ```
-
-    
-
-* **unwrap() ：** 
-
-    Convert seqno → absolute seqno，这个就相对难去想了，首先，seqno是环形的，它一个值可能会对应多个abs seq 例如。  ISN 为零时，seqno “17” 对应于 17 的绝对 seqno，还有 2^32 + 17，或 2^33 + 17，或 2^34 + 17，等等，所以我们这里需要引入一个checkpoint的值，这个checkpoint相当于Receiver的ACKno也就是下一个希望接收到的序号，这样也就让我们知道到底对应哪一个值了，其实想理解这个函数，我觉得不需要特别复杂的数学算法，我们只需要拿出我们的小本本，随手画一画就能找到规律啦！
-
-    ![image-20230204013815242](https://github.com/wannan123/CS144/blob/main/blob/main/lab0/main/note/picture/image-20230204013815242.png)
-
-    主题思路是我们把checkpoint转化为seqno的然后看看它与n的offset，然后再转回来加上这个offset就搞定了。因为我们这里用的是int_64来存abs_n，它的范围为[-2^32,2^32-1]所以如果超过2的32次方，则会变为负数，所以我们需要加上2^32。
-
-    ```c++
-    uint64_t unwrap(WrappingInt32 n, WrappingInt32 isn, uint64_t checkpoint) {
-        DUMMY_CODE(n, isn, checkpoint);
-        WrappingInt32 s_check=wrap(checkpoint,isn);
-        int32_t offset=n-s_check;
-        int64_t ret=checkpoint+offset;
-        if(ret<0){
-            return ret+(1ul << 32);
-        }else{
-            return ret;
-        }
-    ```
-
-## 2. 实现TCPReceiver
-
-
-
-实现这个部分还是需要一点时间的，我花了基本上一天的时间去阅读tcp_helpers里面的 tcp_segment 和tcp_header 两个实例和官方文档，我觉得这个工作还是很有必要的，segment包装了header，header是格外重要的，我们看到最上面那个tcp segment 图，payload以上的部分为head，其实阅读源码就可以更加理解校验和是个怎样工作的，我们可以看这个这段代码：
+我们还需要一个值来记录在一次segment发送后到接收到ack一共经历了多少次重传,这里默认重发计时器是关闭的
 
 ```c++
-    const uint8_t fl_b = p.u8();                  // byte including flags
-    urg = static_cast<bool>(fl_b & 0b0010'0000);  // binary literals and ' digit separator since C++14!!!
-    ack = static_cast<bool>(fl_b & 0b0001'0000);
-    psh = static_cast<bool>(fl_b & 0b0000'1000);
-    rst = static_cast<bool>(fl_b & 0b0000'0100);
-    syn = static_cast<bool>(fl_b & 0b0000'0010);
-    fin = static_cast<bool>(fl_b & 0b0000'0001);
+class time_{
+  private:
+
+    bool is_start=false;
+    unsigned int init_time;
+    unsigned int now_time;
+    unsigned int judge_time;
+
+  public:
+  unsigned int count_time=0;
+    time_(const uint16_t retx_time)
+      :init_time(retx_time)
+      ,now_time(0)
+      ,judge_time(retx_time){}
+    bool isstart(){
+      return is_start;
+    }
+    void active(){
+      is_start=true;
+      judge_time=init_time;
+      count_time=0;
+      now_time=0;
+    }
+    void close_(){
+      is_start=false;
+      judge_time=init_time;
+      count_time=0;
+      now_time=0;
+    }
+    void restart(){
+      is_start=true;
+      now_time=0;
+    }
+    void double_time(const size_t _last_window_size,TCPSegment &seg){
+      if(!is_start){
+        return;
+      }
+      if(_last_window_size!=0||seg.header().syn){
+          
+        judge_time=judge_time<<1;
+
+        count_time++;
+      }
+      
+    }
+    bool tick_time(const size_t ms_since_last_tick){
+      
+      if(!is_start){
+        return false;
+      }
+      now_time+=ms_since_last_tick;
+      if(now_time>=judge_time){
+          return true;
+      }
+      
+      return false;
+    }
+};
 ```
 
-其实就是原码取反然后相加最后为0FFFFFFFFF的一个过程，这里可以去补一下USTC的这块讲解，我记得实在UDP那里讲过，感觉原理差不多。我们之后需要tcp_segment里的head来进行编写。
+注：这里的启动关闭和重启函数的实现要具体到调用，其中我的逻辑是一旦接收到ack就关闭计时器，将所有参数归为最原始的数据。如果在普通发送的时候计时器没有开启，我们便将它开启调用active()函数即可。在检查是否超时的时候，如果超时了就重发，重发只需要修改累计时间和累计次数，我们需要调用tick_time()，double_time()，以及restart()函数，所以每一个函数的实现都是由讲究滴~
 
-我们需要实现四个函数，我们一个一个攻破！
 
-* **void segment_received(const TCPSegment &seg);**
 
-    这个函数是这一部分的难点，你需要判断到来的序号是否为SYN，如果是第一次出现SYN你需要记录一下，然后在此之后出现SYN的话就说明是多余的，所以直接return即可，这里其实埋下了一个坑点，我也是查看网上博客才知道的，这里SYN和FIN都是带有数据包的，所以不能直接返回，不然是过不了测试的。所以我们需要对第一次到来的SYN也要进行处理（给reassembler），而且你不能遇到FIN就返回（这也是我出现错误的点，足足让我debug好长时间...）另一个点在于checkpoint的选取，你不能直接选ackno，因为这个段是乱序的，有可能给你发一个很后的段，所以我们采用写了多少个段来解决，最后写入reassembler就行。
 
-    ```c++
-    void TCPReceiver::segment_received(const TCPSegment &seg) {
-        DUMMY_CODE(seg);
-        if(!is_syn && !seg.header().syn){return;}
-        if(is_syn && seg.header().syn){return;}
-        //if(is_fin){return;}//不要返回，万一提前遇到fin就寄了。
-        if(seg.header().fin){
-            is_fin=true;
-        }
-        if(seg.header().syn && !is_syn){
-            syn=seg.header().seqno;
-            is_syn=true;
-            //return;//这是个坑，syn其实也有数据
-        }
-        //这里一定要用written,seg的ackno有可能是在真正checkpoint前后的。
-        uint64_t checkpoint=_reassembler.stream_out().bytes_written()+1;
-        uint64_t abs_seg=unwrap(seg.header().seqno,syn,checkpoint);
-    
-        uint64_t _index = abs_seg - 1 + static_cast<uint64_t>(seg.header().syn);
-        string segment=seg.payload().copy();
-        _reassembler.push_substring(segment,_index,seg.header().fin);
-        
-    }
-    ```
 
-* **std::optional<WrappingInt32> ackno() const;**
+## 2.Sender的具体实现
 
-    这里就相对简单了，这里的ackno也是采取用written来解决，值得注意的是，SYN和FIN是带有数据的，别忘了就好~
+首先我们需要明确Sender的工作流程：
 
-    ```c++
-    optional<WrappingInt32> TCPReceiver::ackno() const { 
-        if(!is_syn){
-            return{};
-        }
-        uint64_t has_written=_reassembler.stream_out().bytes_written()+1;
-        if (stream_out().input_ended()){
-            return wrap(has_written+1,syn);
-        }
-        return wrap(has_written,syn);
-    
-    }
-    ```
+	1. 调用fill_window（）函数，判断是否是段尾（FIN) 或者段头（SYN）如果是SYN是不需要传数据的，直接修改TCPsegment的头部即可，FIN在本实验中是可以携带信息的，可以在后面处理。
+ 	2. 调用send_segment（）函数，这个函数是自己写的，也就是发送函数，这个函数的使用者是fill_window（）
+ 	3. 时不时调用tick函数来检查是否超时，如果超时就重新发送。
+ 	4. 调用ack_received（）函数来接收已经成功发送的段的ack，并关闭重发计时器。
 
-* **size_t TCPReceiver::window_size() const**
+我们需要注意几个细节。
 
-    ```c++
-    size_t TCPReceiver::window_size() const { return stream_out().remaining_capacity(); }
-    ```
+	*	文档里说了窗口的设置：如果receiver返回的窗口大小为0，也就是说明接收器满了，希望sender再别发送了，这时候其实就有个问题，sender什么时候知道receiver有空能接收数据呢？我们需要手动将window改为1，这样就可以不断的发送小的数据报，直到接收器由空他就可以返回ack，继续发送了
+	*	segment一直放在wait_seg里，每当要重新传时，放入seg_out里，当接收到ack时就pop掉wait_seg。每次需要发送的时候就取wait_seg的头部就好了，这里不需要pop掉seg_out，这里的pop好像在测试用例还是哪里已经帮我们实现了
+	*	所谓的发送的数据报就是放到seg_out里
+	*	我们需要理解一下边界：
 
-当我们思考完函数后其实我们就知道我们还需要再private里添加几个值，这也是我一直的思考问题的方式
+![](https://github.com/wannan123/CS144/blob/main/blob/main/lab0/main/note/picture/QQ图片20230209013111.png)
+
+#### 1.fill_window（）函数
+
+我们需要注意发送的内容时从stream里read()出来的，大小也就是上图中黄色的部分，并且我们需要判断一下正在发送的内容有没有越界，
 
 ```c++
-class TCPReceiver {
-    //! Our data structure for re-assembling bytes.
-    
+void TCPSender::fill_window() {
+    size_t window_sizes = receiver_window_size_ > 0 ?receiver_window_size_ : 1;
+    TCPSegment segment;
+    if(is_fin){
+        return;
+    }
 
-    StreamReassembler _reassembler;
-    //! The maximum number of bytes we'll store.
-    size_t _capacity;
-    WrappingInt32 syn{0};
-    bool is_syn=false;
-    bool is_fin=false;
+    if(!is_syn){
+        
+        segment.header().syn=true;
+        segment.header().seqno=next_seqno();
+        wait_ack.push(segment);
+        send_segment(segment);
+        is_syn=true;
+        return;
+    }
+    
+    if (_next_seqno == bytes_in_flights) {
+        return;
+    }
+
+    if(_stream.eof() && window_sizes>_next_seqno-rece_seqno){
+        is_fin=true;
+        segment.header().fin=true;
+        segment.header().seqno=next_seqno();
+        wait_ack.push(segment);
+        send_segment(segment);
+        return;
+    }
+    while(!_stream.buffer_empty()&&window_sizes>_next_seqno-rece_seqno){
+        size_t size=min(TCPConfig::MAX_PAYLOAD_SIZE,static_cast<size_t>(window_sizes-(_next_seqno-rece_seqno)));
+        
+        segment.payload()=Buffer(_stream.read(min(size,_stream.buffer_size())));
+        if(_stream.eof()&&segment.length_in_sequence_space()<window_sizes){
+            is_fin=true;
+            segment.header().fin=true;
+        }
+        if (segment.length_in_sequence_space() == 0)return;
+        segment.header().seqno=next_seqno();
+        wait_ack.push(segment);
+        send_segment(segment);
+    }
+
+
+}
+```
+
+
+
+#### 2.send_segment()函数
+
+这里就需要记录一下已经发送但还没有接收的字节有多少，并且开启计时器
+
+```c++
+void TCPSender::send_segment(TCPSegment &segment) {
+ 
+    _segments_out.push(segment);
+    bytes_in_flights+=segment.length_in_sequence_space();
+    
+    _next_seqno+=segment.length_in_sequence_space();
+    //累计的，不是每次重启
+    if(!re_time_.isstart()){
+ 
+        re_time_.active();
+        re_time_.restart();//reboot;
+    }
+}
+```
+
+#### 3.ack_received()函数
+
+我们首先要判断一下接收到的ack是否是在蓝色的段中，也就是正在发送的范围内，并且记录接收器的窗口大小，重启计时器，并且判断是否需要关闭计时器。
+
+```c++
+void TCPSender::ack_received(const WrappingInt32 ackno, const uint16_t window_size) { 
+    DUMMY_CODE(ackno, window_size); 
+
+    uint64_t ack_no=unwrap(ackno,_isn,_next_seqno);
+    if(ack_no>_next_seqno){
+        cerr<<receiver_window_size_<<endl;
+        return;
+    }
+    receiver_window_size_=window_size;
+   
+    if(ack_no<=rece_seqno){
+        return;
+    }
+    if(ack_no>rece_seqno){
+        rece_seqno=ack_no;
+        
+    }
+
+    pop_=false;
+    re_time_.active(); 
+    
+    while (!wait_ack.empty())
+    {   
+        
+        TCPSegment seg=wait_ack.front();
+
+        if (ack_no <unwrap(seg.header().seqno, _isn, _next_seqno) + seg.length_in_sequence_space()) {
+           return;
+        }
+
+        wait_ack.pop();
+        bytes_in_flights-=seg.length_in_sequence_space();
+        pop_=true;
+
+          
+    }
+    if(pop_){
+        fill_window();
+    }
+    if(wait_ack.empty()){
+        re_time_.close_();
+    }
+
+
+}
+```
+
+#### 4.tick()函数
+
+这里有有个点要注意，我们重传的时候不用是用send函数，直接吧segment塞到队列即可，因为我们的send函数是累计有多少为确认的功能的。
+
+```c++
+void TCPSender::tick(const size_t ms_since_last_tick) { 
+    DUMMY_CODE(ms_since_last_tick); 
+ 
+    if(!re_time_.tick_time(ms_since_last_tick)){
+        return;
+    }
+    
+    if(wait_ack.empty()){
+        re_time_.close_();
+        return;
+    }
+    
+    TCPSegment seg=wait_ack.front();
+    //这里不能掉send函数，因为不需要记录
+    _segments_out.push(wait_ack.front());
+    re_time_.double_time(receiver_window_size_,seg);
+    re_time_.restart();
+
+
+    
+}
 ```
 
