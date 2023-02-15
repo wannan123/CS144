@@ -22,7 +22,7 @@ size_t TCPConnection::time_since_last_segment_received() const { return {}; }
 
 void TCPConnection::segment_received(const TCPSegment &seg) { DUMMY_CODE(seg); }
 
-bool TCPConnection::active() const { return {}; }
+bool TCPConnection::active() const { return {active_}; }
 
 size_t TCPConnection::write(const string &data) {
     DUMMY_CODE(data);
@@ -34,7 +34,12 @@ void TCPConnection::tick(const size_t ms_since_last_tick) { DUMMY_CODE(ms_since_
 
 void TCPConnection::end_input_stream() {}
 
-void TCPConnection::connect() {}
+void TCPConnection::connect() {
+    if(_sender.next_seqno_absolute()==0){
+        _sender.fill_window();
+        active_=true;
+    }
+}
 
 TCPConnection::~TCPConnection() {
     try {
