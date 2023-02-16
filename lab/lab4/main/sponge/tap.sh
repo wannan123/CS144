@@ -1,41 +1,43 @@
 #!/bin/bash
 
 show_usage () {
-    echo "Usage: $0 <start | stop | restart | check> [tunnum ...]"
+    echo "Usage: $0 <start | stop | restart | check> [tapnum ...]"
     exit 1
 }
 
-start_tun () {
-    local TUNNUM="$1" TUNDEV="tun$1"
-    ip tuntap add mode tun user "${SUDO_USER}" name "${TUNDEV}"
-    ip addr add "${TUN_IP_PREFIX}.${TUNNUM}.1/24" dev "${TUNDEV}"
-    ip link set dev "${TUNDEV}" up
-    ip route change "${TUN_IP_PREFIX}.${TUNNUM}.0/24" dev "${TUNDEV}" rto_min 10ms
+start_tap () {
+    local TAPNUM="$1" TAPDEV="tap$1" LLADDR="02:B0:1D:FA:CE:"`printf "%02x" $1`
+    ip tuntap add mode tap user "${SUDO_USER}" name "${TAPDEV}"
+    ip link set "${TAPDEV}" address "${LLADDR}"
+
+    ip addr add "${TUN_IP_PREFIX}.${TAPNUM}.1/24" dev "${TAPDEV}"
+    ip link set dev "${TAPDEV}" up
+    ip route change "${TUN_IP_PREFIX}.${TAPNUM}.0/24" dev "${TAPDEV}" rto_min 10ms
 
     # Apply NAT (masquerading) only to traffic from CS144's network devices
-    iptables -t nat -A PREROUTING -s ${TUN_IP_PREFIX}.${TUNNUM}.0/24 -j CONNMARK --set-mark ${TUNNUM}
-    iptables -t nat -A POSTROUTING -j MASQUERADE -m connmark --mark ${TUNNUM}
+    iptables -t nat -A PREROUTING -s ${TUN_IP_PREFIX}.${TAPNUM}.0/24 -j CONNMARK --set-mark ${TAPNUM}
+    iptables -t nat -A POSTROUTING -j MASQUERADE -m connmark --mark ${TAPNUM}
     echo 1 > /proc/sys/net/ipv4/ip_forward
 }
 
-stop_tun () {
-    local TUNDEV="tun$1"
+stop_tap () {
+    local TAPDEV="tap$1"
     iptables -t nat -D PREROUTING -s ${TUN_IP_PREFIX}.${1}.0/24 -j CONNMARK --set-mark ${1}
     iptables -t nat -D POSTROUTING -j MASQUERADE -m connmark --mark ${1}
-    ip tuntap del mode tun name "$TUNDEV"
+    ip tuntap del mode tap name "$TAPDEV"
 }
 
 start_all () {
     while [ ! -z "$1" ]; do
         local INTF="$1"; shift
-        start_tun "$INTF"
+        start_tap "$INTF"
     done
 }
 
 stop_all () {
     while [ ! -z "$1" ]; do
         local INTF="$1"; shift
-        stop_tun "$INTF"
+        stop_tap "$INTF"
     done
 }
 
@@ -44,11 +46,11 @@ restart_all() {
     start_all "$@"
 }
 
-check_tun () {
-    [ "$#" != 1 ] && { echo "bad params in check_tun"; exit 1; }
-    local TUNDEV="tun${1}"
-    # make sure tun is healthy: device is up, ip_forward is set, and iptables is configured
-    ip link show ${TUNDEV} &>/dev/null || return 1
+check_tap () {
+    [ "$#" != 1 ] && { echo "bad params in check_tap"; exit 1; }
+    local TAPDEV="tap${1}"
+    # make sure tap is healthy: device is up, ip_forward is set, and iptables is configured
+    ip link show ${TAPDEV} &>/dev/null || return 1
     [ "$(cat /proc/sys/net/ipv4/ip_forward)" = "1" ] || return 2
 }
 
@@ -71,7 +73,7 @@ MODE=$1; shift
 
 # set default argument
 if [ "$#" = "0" ]; then
-    set -- 144 145
+    set -- 10
 fi
 
 # execute 'check' before trying to sudo
@@ -81,7 +83,7 @@ if [ "$MODE" = "check" ]; then
     MODE="start"
     while [ ! -z "$1" ]; do
         INTF="$1"; shift
-        check_tun ${INTF}
+        check_tap ${INTF}
         RET=$?
         if [ "$RET" = "0" ]; then
             continue
