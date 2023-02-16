@@ -34,7 +34,9 @@ size_t TCPConnection::write(const string &data) {
 }
 
 //! \param[in] ms_since_last_tick number of milliseconds since the last call to this method
-void TCPConnection::tick(const size_t ms_since_last_tick) { DUMMY_CODE(ms_since_last_tick); }
+void TCPConnection::tick(const size_t ms_since_last_tick) { 
+    DUMMY_CODE(ms_since_last_tick);
+}
 
 void TCPConnection::end_input_stream() {
     if(!active()){
@@ -57,12 +59,18 @@ void TCPConnection::send_merge_segment(){
         TCPSegment seg=_sender.segments_out().front();
         _sender.segments_out().pop();
         if(_receiver.ackno().has_value()){
+            seg.header().ack=true;
             seg.header().ackno=_receiver.ackno().value();
             seg.header().win=_receiver.window_size();
         }
         _segments_out.push(seg);
     }
     
+}
+void TCPConnection::deal_rsp(bool & rsp){
+    if(rsp){
+    
+    }
 }
 
 TCPConnection::~TCPConnection() {
