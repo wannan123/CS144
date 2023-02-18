@@ -93,11 +93,10 @@ void TCPSender::ack_received(const WrappingInt32 ackno, const uint16_t window_si
 
     uint64_t ack_no=unwrap(ackno,_isn,_next_seqno);
     if(ack_no>_next_seqno){
-        cerr<<receiver_window_size_<<endl;
         return;
     }
     receiver_window_size_=window_size;
-    cerr<<receiver_window_size_<<endl;
+
     if(ack_no<=rece_seqno){
         return;
     }
