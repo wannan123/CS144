@@ -1,264 +1,259 @@
 
 
-# Lab3（the TCP sender）
+# Lab4（the TCP connection）
 
 
 
-omg，终于做完lab3了，lab3真的是一个难度的大跳跃，整个难度一下子就上来了，本次实验用时大概有5天的时间，从读文档到最后完成lab，真的是一段艰难的旅途。本次实验的文档让人很难理解，就是读完其实也是很模糊它到底想让我们实现什么内容，所以让我花费的时间很多，大概足足有2天半的时间来读文档和思考，不像之前的实验读完就比较好理解到底是想做什么，本次实验我也是在写代码前做了很多思维导图，去整理逻辑。在改bug的时候也是异常艰难，我感觉不能再单纯的是用cerr了，得找个时间好好学习一下gdb或者其他调试工具。总之这次的实验让我非常头疼hhh不过想到lab4会更难，我还是坚持了下来！还是先看看总体图吧！：
+lab4是一项非常难的工程，由于这周回到学校了，效率不是很高，这个lab花了我足足1周的时间，文档读了3天左右2天改代码，两天调试，真的很累人，这次的实验算是前面几次里难度最高的，不管是从文档角度来说还是从代码和调试角度来说，都是一个维度的跳跃，因为前面几次的lab我做完后都有核对github上各位大佬的代码，所以我的tcp_sender和receiver的鲁棒性都很高，我在写代码的时候没有遇到雷人的需要去改之前的代码的情况，这虽然方便了自己，但是还是缺少了很多锻炼自己的能力。
 
-![image-20230124214052262](https://github.com/wannan123/CS144/blob/main/blob/main/lab0/main/note/picture/image-20230124214052262.png)
-
-我们这次实验是实现一个TCP Sender，也就是发送器，其中也有两大难点：
-
-* 重发计时器的启动，关闭，重启，判断超时。
-* 理解Sender的工作流程以及原理。
-
-那么我们开启Lab3之旅吧！
-
-## 1.实现重发计时器
-
-首先要理解文档里的重发计时器到底是怎么工作的，一开始我也很纳闷如果不用系统时间函数那怎么记时呢？随着看完他的函数申明后，是给一个*ms_since_last_tick*d 的参数的，也就是测试用例会时不时的调用tick函数给一个距离上次调用这个函数的时间，也就是说测试用例会给你一个数字，代表过去的时间。根据文档的建议，我将它封装成一个time_类，然后实现它的功能。
-
-第二点我们要知道重发计时器有什么用：我们知道报文在传输的时候会遇到各种困难，有可能会丢失，为了解决这个问题我们需要重新发送报文，但是这个重新发送需要有一定的限制，它的时间阈值是动态的，每当超过这个阈值sender还没有收到receiver的ack时我们需要重新发送之前的报文。在一开始会认为是每次发送一段segment都要记录一下，其实不然。本实验的意思就是记录最初没有收到ack的报文，当收到报文的ack时重新发送这段数据包就可以啦，其次是这个动态阈值是如何变化的，为何变化的：因为网络的拥堵不是定值，只要发生一次需要重传，我们都需要将阈值扩大，因为既然发生了拥堵，就说明我们需要多等待一会儿。
-
-我们还需要一个值来记录在一次segment发送后到接收到ack一共经历了多少次重传,这里默认重发计时器是关闭的
-
-```c++
-class time_{
-  private:
-
-    bool is_start=false;
-    unsigned int init_time;
-    unsigned int now_time;
-    unsigned int judge_time;
-
-  public:
-  unsigned int count_time=0;
-    time_(const uint16_t retx_time)
-      :init_time(retx_time)
-      ,now_time(0)
-      ,judge_time(retx_time){}
-    bool isstart(){
-      return is_start;
-    }
-    void active(){
-      is_start=true;
-      judge_time=init_time;
-      count_time=0;
-      now_time=0;
-    }
-    void close_(){
-      is_start=false;
-      judge_time=init_time;
-      count_time=0;
-      now_time=0;
-    }
-    void restart(){
-      is_start=true;
-      now_time=0;
-    }
-    void double_time(const size_t _last_window_size,TCPSegment &seg){
-      if(!is_start){
-        return;
-      }
-      if(_last_window_size!=0||seg.header().syn){
-          
-        judge_time=judge_time<<1;
-
-        count_time++;
-      }
-      
-    }
-    bool tick_time(const size_t ms_since_last_tick){
-      
-      if(!is_start){
-        return false;
-      }
-      now_time+=ms_since_last_tick;
-      if(now_time>=judge_time){
-          return true;
-      }
-      
-      return false;
-    }
-};
-```
-
-注：这里的启动关闭和重启函数的实现要具体到调用，其中我的逻辑是一旦接收到ack就关闭计时器，将所有参数归为最原始的数据。如果在普通发送的时候计时器没有开启，我们便将它开启调用active()函数即可。在检查是否超时的时候，如果超时了就重发，重发只需要修改累计时间和累计次数，我们需要调用tick_time()，double_time()，以及restart()函数，所以每一个函数的实现都是由讲究滴~
+本次实验的难点我认为在于理解TCP有限状态机的各个状态，也就是segment_received函数中各个判断条件，这次的实验是结合lab3和lab2的sender和receiver来做的他其实就是想让你站在一个更高的角度来俯瞰整个状态，就是不管是client端还是server段你都需要考虑sender和receiver的状态，sender和receiver结合成connection存在与两端。
 
 
 
+## 1.TCP的三次握手和四次挥手
+
+TCP的有限状态机分为三次握手和四次挥手，理解这一点很重要
+
+* 三次握手
+
+![](https://github.com/wannan123/CS144/blob/main/blob/main/lab0/main/note/picture/3.png)
 
 
-## 2.Sender的具体实现
 
-首先我们需要明确Sender的工作流程：
+我们在还没有建立连接的时候服务端是保持LISTEN状态的，当客户端发起请求的时候，发送SYN=1（第一次握手）服务端接收到这个SYN然后给一个确认ACK=1,并且也发送一个SYN=1（第二次握手）在客户端发送出去SYN的时候他是处于SYN -SENT状态的，服务段发送确认和SYN的时候服务端处于SYN-RCVD状态，当客户端接收到服务端发送的SYN后也要给一个确认给客户端（第三次握手）并且发送数据，这样就达成了建立。
 
-	1. 调用fill_window（）函数，判断是否是段尾（FIN) 或者段头（SYN）如果是SYN是不需要传数据的，直接修改TCPsegment的头部即可，FIN在本实验中是可以携带信息的，可以在后面处理。
- 	2. 调用send_segment（）函数，这个函数是自己写的，也就是发送函数，这个函数的使用者是fill_window（）
- 	3. 时不时调用tick函数来检查是否超时，如果超时就重新发送。
- 	4. 调用ack_received（）函数来接收已经成功发送的段的ack，并关闭重发计时器。
+但有人会问为什么不是两次握手呢？就好比小明想给小红表白寄信，第一次小明发送我喜欢你（第一次握手），但是由于快递员记错位置了很长时间都没有送到，于是他又发送了一次我喜欢你，这次小红收到了信，也发送我也喜欢你并且送上了一束花（数据）（第二次握手）从此他们幸福的在一起了，但是突然有一天分手了，这个时候小明一开始发送的第一封信终于送到小红手里了小红以为小明要复合，于是再次发送我也喜欢你并且送上了一束花（数据）但是小明很渣，他就没离小红于是小红一直以为小明没有收到信，所以一直发送数据，这样就导致过度的浪费资源了。但是如果用三次握手的话，第二次小红给小明发送我也喜欢你的时候是不需要送花的，只有当小明知道小红也喜欢他的时候这样小明再发一次那我们在一起吧（第三次握手）并且送花，这样就会避免数据缺失，但是有人会问难道小红发送的时候不会延迟嘛，因为小明他受到的是SYN和一个ACK，所以这个时刻只有小明知道自己之前有没有发送请求。当然也有很多复杂的情况，但是三次握手能相对的解决大部分问题。
 
-我们需要注意几个细节。
+* 四次挥手
 
-	*	文档里说了窗口的设置：如果receiver返回的窗口大小为0，也就是说明接收器满了，希望sender再别发送了，这时候其实就有个问题，sender什么时候知道receiver有空能接收数据呢？我们需要手动将window改为1，这样就可以不断的发送小的数据报，直到接收器由空他就可以返回ack，继续发送了
-	*	segment一直放在wait_seg里，每当要重新传时，放入seg_out里，当接收到ack时就pop掉wait_seg。每次需要发送的时候就取wait_seg的头部就好了，这里不需要pop掉seg_out，这里的pop好像在测试用例还是哪里已经帮我们实现了
-	*	所谓的发送的数据报就是放到seg_out里
-	*	我们需要理解一下边界：
+![](https://github.com/wannan123/CS144/blob/main/blob/main/lab0/main/note/picture/4挥手.png)
 
-![](https://github.com/wannan123/CS144/blob/main/blob/main/lab0/main/note/picture/QQ图片20230209013111.png)
 
-#### 1.fill_window（）函数
 
-我们需要注意发送的内容时从stream里read()出来的，大小也就是上图中黄色的部分，并且我们需要判断一下正在发送的内容有没有越界，
+四次挥手用通俗的话来说就是，小明想要给向红说咱们分手把（第一次挥手）小红收到信后，发送好的我同意你的分手（第二次挥手）但是你得等我给你送一点最后的分手礼物，当小红送完了，发送好了，现在可以分手了（第三次挥手）小明收到后发送，那你关机吧（第四次挥手）这个时候小明会等待一段时间，如果这个时间里在没有收到小红的第三次挥手的信，小明会自动关机，小红收到信后也会关机，这样就保持了双方都能关机。
+
+在客户端的FIN-WAIT-1到接收到服务段的FIN的时候客户端的receiver都是开启的。
+
+代码来说，我们需要注意的点是用seg的头部syn，ack的布尔值和receiver，sender的各个方法来确认个状态，我们用sender发送空的segment来代表ack，并且要注意在建立状态的时候要时不时发送一个空的segment来确保是连接状态
 
 ```c++
-void TCPSender::fill_window() {
-    size_t window_sizes = receiver_window_size_ > 0 ?receiver_window_size_ : 1;
-    TCPSegment segment;
-    if(is_fin){
-        return;
-    }
+void TCPConnection::segment_received(const TCPSegment &seg) {
+   // 非启动时不接收
+   if (!active_) {
+       return;
+   }
 
-    if(!is_syn){
-        
-        segment.header().syn=true;
-        segment.header().seqno=next_seqno();
-        wait_ack.push(segment);
-        send_segment(segment);
-        is_syn=true;
-        return;
-    }
-    
-    if (_next_seqno == bytes_in_flights) {
-        return;
-    }
+   // 重置连接时间
+   ms_since_last = 0;
 
-    if(_stream.eof() && window_sizes>_next_seqno-rece_seqno){
-        is_fin=true;
-        segment.header().fin=true;
-        segment.header().seqno=next_seqno();
-        wait_ack.push(segment);
-        send_segment(segment);
-        return;
-    }
-    while(!_stream.buffer_empty()&&window_sizes>_next_seqno-rece_seqno){
-        size_t size=min(TCPConfig::MAX_PAYLOAD_SIZE,static_cast<size_t>(window_sizes-(_next_seqno-rece_seqno)));
-        
-        segment.payload()=Buffer(_stream.read(min(size,_stream.buffer_size())));
-        if(_stream.eof()&&segment.length_in_sequence_space()<window_sizes){
-            is_fin=true;
-            segment.header().fin=true;
-        }
-        if (segment.length_in_sequence_space() == 0)return;
-        segment.header().seqno=next_seqno();
-        wait_ack.push(segment);
-        send_segment(segment);
-    }
-
-
+   // RST标志，直接关闭连接
+   if (seg.header().rst) {
+       // 在出站入站流中标记错误，使active返回false
+       _receiver.stream_out().set_error();
+       _sender.stream_in().set_error();
+       active_ = false;
+   }
+   // 当前是Closed/Listen状态
+   else if (_sender.next_seqno_absolute() == 0) {
+       // 收到SYN，说明TCP连接由对方启动，进入Syn-Revd状态
+       if (seg.header().syn) {
+           // 此时还没有ACK，所以sender不需要ack_received
+           _receiver.segment_received(seg);
+           // 我们主动发送一个SYN
+           connect();
+       }
+   }
+   // 当前是Syn-Sent状态
+   else if (_sender.next_seqno_absolute() == _sender.bytes_in_flight() && !_receiver.ackno().has_value()) {
+       if (seg.header().syn && seg.header().ack) {
+           // 收到SYN和ACK，说明由对方主动开启连接，进入Established状态，通过一个空包来发送ACK
+           _sender.ack_received(seg.header().ackno, seg.header().win);
+           _receiver.segment_received(seg);
+           _sender.send_empty_segment();
+           send_merge_segment();
+       } else if (seg.header().syn && !seg.header().ack) {
+           // 只收到了SYN，说明由双方同时开启连接，进入Syn-Rcvd状态，没有接收到对方的ACK，我们主动发一个
+           _receiver.segment_received(seg);
+           _sender.send_empty_segment();
+           send_merge_segment();
+       }
+   }
+   // 当前是Syn-Revd状态，并且输入没有结束
+   else if (_sender.next_seqno_absolute() == _sender.bytes_in_flight() && _receiver.ackno().has_value() &&
+            !_receiver.stream_out().input_ended()) {
+       // 接收ACK，进入Established状态
+       _sender.ack_received(seg.header().ackno, seg.header().win);
+       _receiver.segment_received(seg);
+   }
+   // 当前是Established状态，连接已建立
+   else if (_sender.next_seqno_absolute() > _sender.bytes_in_flight() && !_sender.stream_in().eof()) {
+       // 发送数据，如果接到数据，则更新ACK
+       _sender.ack_received(seg.header().ackno, seg.header().win);
+       _receiver.segment_received(seg);
+       if (seg.length_in_sequence_space() > 0) {
+           _sender.send_empty_segment();
+       }
+       _sender.fill_window();
+       send_merge_segment();
+   }
+   // 当前是Fin-Wait-1状态
+   else if (_sender.stream_in().eof() && _sender.next_seqno_absolute() == _sender.stream_in().bytes_written() + 2 &&
+            _sender.bytes_in_flight() > 0 && !_receiver.stream_out().input_ended()) {
+       if (seg.header().fin) {
+           // 收到Fin，则发送新ACK，进入Closing/Time-Wait
+           _sender.ack_received(seg.header().ackno, seg.header().win);
+           _receiver.segment_received(seg);
+           _sender.send_empty_segment();
+           send_merge_segment();
+       } else if (seg.header().ack) {
+           // 收到ACK，进入Fin-Wait-2
+           _sender.ack_received(seg.header().ackno, seg.header().win);
+           _receiver.segment_received(seg);
+           send_merge_segment();
+       }
+   }
+   // 当前是Fin-Wait-2状态
+   else if (_sender.stream_in().eof() && _sender.next_seqno_absolute() == _sender.stream_in().bytes_written() + 2 &&
+            _sender.bytes_in_flight() == 0 && !_receiver.stream_out().input_ended()) {
+       _sender.ack_received(seg.header().ackno, seg.header().win);
+       _receiver.segment_received(seg);
+       _sender.send_empty_segment();
+       send_merge_segment();
+   }
+   // 当前是Time-Wait状态
+   else if (_sender.stream_in().eof() && _sender.next_seqno_absolute() == _sender.stream_in().bytes_written() + 2 &&
+            _sender.bytes_in_flight() == 0 && _receiver.stream_out().input_ended()) {
+       if (seg.header().fin) {
+           // 收到FIN，保持Time-Wait状态
+           _sender.ack_received(seg.header().ackno, seg.header().win);
+           _receiver.segment_received(seg);
+           _sender.send_empty_segment();
+           send_merge_segment();
+       }
+   }
+   // 其他状态
+   else {
+       _sender.ack_received(seg.header().ackno, seg.header().win);
+       _receiver.segment_received(seg);
+       _sender.fill_window();
+       send_merge_segment();
+   }
 }
 ```
 
+## 2.write部分
 
+这一部分应该是相对来说简单的，因为指导书上有说到如何开始，我们可以从write部分开始。
 
-#### 2.send_segment()函数
-
-这里就需要记录一下已经发送但还没有接收的字节有多少，并且开启计时器
+如何发送呢？其实connection就是将receiver的ack和窗口大小与sender中的segment相结合然后放在一个队列上，发送出去（和sender的原理很像）这里我们需要自己写一个函数来解决合并问题
 
 ```c++
-void TCPSender::send_segment(TCPSegment &segment) {
- 
-    _segments_out.push(segment);
-    bytes_in_flights+=segment.length_in_sequence_space();
-    
-    _next_seqno+=segment.length_in_sequence_space();
-    //累计的，不是每次重启
-    if(!re_time_.isstart()){
- 
-        re_time_.active();
-        re_time_.restart();//reboot;
-    }
+void TCPConnection::send_merge_segment() {
+   // 将sender中的数据保存到connection中
+   while (!_sender.segments_out().empty()) {
+       TCPSegment seg = _sender.segments_out().front();
+       _sender.segments_out().pop();
+       // 设置ackno和window_size
+       if (_receiver.ackno().has_value()) {
+           seg.header().ack = true;
+           seg.header().ackno = _receiver.ackno().value();
+           seg.header().win = _receiver.window_size();
+       }
+       _segments_out.push(seg);
+   }
+   // 如果发送完毕则结束连接
+   if (_receiver.stream_out().input_ended()) {
+       if (!_sender.stream_in().eof()) {
+           _linger_after_streams_finish  = false;
+       }
+
+       else if (_sender.bytes_in_flight() == 0) {
+           if (!_linger_after_streams_finish || time_since_last_segment_received() >= 10 * _cfg.rt_timeout) {
+               active_ = false;
+           }
+       }
+   }
 }
 ```
 
-#### 3.ack_received()函数
-
-我们首先要判断一下接收到的ack是否是在蓝色的段中，也就是正在发送的范围内，并且记录接收器的窗口大小，重启计时器，并且判断是否需要关闭计时器。
+其次我们需要一个解决rsp问题的函数，也就是如果发生了错误，我们需要发送一个rsp段并且关闭连接，这个错误通常在于超时次数过多。
 
 ```c++
-void TCPSender::ack_received(const WrappingInt32 ackno, const uint16_t window_size) { 
-    DUMMY_CODE(ackno, window_size); 
-
-    uint64_t ack_no=unwrap(ackno,_isn,_next_seqno);
-    if(ack_no>_next_seqno){
-        cerr<<receiver_window_size_<<endl;
-        return;
-    }
-    receiver_window_size_=window_size;
-   
-    if(ack_no<=rece_seqno){
-        return;
-    }
-    if(ack_no>rece_seqno){
-        rece_seqno=ack_no;
-        
-    }
-
-    pop_=false;
-    re_time_.active(); 
-    
-    while (!wait_ack.empty())
-    {   
-        
-        TCPSegment seg=wait_ack.front();
-
-        if (ack_no <unwrap(seg.header().seqno, _isn, _next_seqno) + seg.length_in_sequence_space()) {
-           return;
-        }
-
-        wait_ack.pop();
-        bytes_in_flights-=seg.length_in_sequence_space();
-        pop_=true;
-
-          
-    }
-    if(pop_){
-        fill_window();
-    }
-    if(wait_ack.empty()){
-        re_time_.close_();
-    }
+void TCPConnection::deal_rsp(bool send_rst) {
+   // 发送RST标志
+   if(send_rst){
+        TCPSegment seg;
+        seg.header().rst = true;
+        _segments_out.push(seg);
+   }
 
 
+   // 在出站入站流中标记错误，使active返回false
+   _receiver.stream_out().set_error();
+   _sender.stream_in().set_error();
+   active_ = false;
 }
 ```
 
-#### 4.tick()函数
-
-这里有有个点要注意，我们重传的时候不用是用send函数，直接吧segment塞到队列即可，因为我们的send函数是累计有多少为确认的功能的。
+和判断是否超时的函数
 
 ```c++
-void TCPSender::tick(const size_t ms_since_last_tick) { 
-    DUMMY_CODE(ms_since_last_tick); 
- 
-    if(!re_time_.tick_time(ms_since_last_tick)){
-        return;
-    }
-    
-    if(wait_ack.empty()){
-        re_time_.close_();
-        return;
-    }
-    
-    TCPSegment seg=wait_ack.front();
-    //这里不能掉send函数，因为不需要记录
-    _segments_out.push(wait_ack.front());
-    re_time_.double_time(receiver_window_size_,seg);
-    re_time_.restart();
+void TCPConnection::tick(const size_t ms_since_last_tick) {
+   // 非启动时不接收
+   if (!active_) {
+       return;
+   }
 
+   // 保存时间，并通知sender
+   ms_since_last+= ms_since_last_tick;
+   _sender.tick(ms_since_last_tick);
 
-    
+   // 超时需要重置连接
+   if (_sender.consecutive_retransmissions() > TCPConfig::MAX_RETX_ATTEMPTS) {
+       deal_rsp(true);
+       return;
+   }
+   send_merge_segment();
 }
 ```
 
+接下来就是相对比较简单的连接函数，写函数，以及结束发送函数了
+
+```c++
+size_t TCPConnection::write(const string &data) {
+   if (data.empty()) {
+       return 0;
+   }
+
+   // 在sender中写入数据并发送
+   size_t size = _sender.stream_in().write(data);
+   _sender.fill_window();
+   send_merge_segment();
+   return size;
+}
+
+void TCPConnection::connect() {
+   // 主动启动，fill_window方法会发送Syn
+   _sender.fill_window();
+   send_merge_segment();
+}
+//析构函数
+TCPConnection::~TCPConnection() {
+   try {
+       if (active()) {
+           cerr << "Warning: Unclean shutdown of TCPConnection\n";
+
+           // Your code here: need to send a RST segment to the peer
+           deal_rsp(false);
+       }
+   } catch (const exception &e) {
+       std::cerr << "Exception destructing TCP FSM: " << e.what() << std::endl;
+   }
+}
+```
+
+因为sender的fill_window自带发送fin和syn的效果，所以直接调用就行了。
+
+调试的话就用wireshark抓包，具体可以上知乎查查细节，本次实验是模拟一个虚拟网卡在本机上建立服务器和客户端来通信的，最后可以运行玩完，自此CS144的5个lab终于做完了，我也在思考要不要继续往下走，做完lab5,6
+
+加油吧！
