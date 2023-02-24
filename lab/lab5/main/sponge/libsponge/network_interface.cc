@@ -32,8 +32,33 @@ NetworkInterface::NetworkInterface(const EthernetAddress &ethernet_address, cons
 void NetworkInterface::send_datagram(const InternetDatagram &dgram, const Address &next_hop) {
     // convert IP address of next hop to raw 32-bit representation (used in ARP header)
     const uint32_t next_hop_ip = next_hop.ipv4_numeric();
+    const uint32_t it=arp_table.find(next_hop_ip);
+    
+    if(it==arp_table.end()){
+        //广播
+        if(it==wait_to_address.end()){
+            ARPMessage arp_mess;
+            arp_mess.opcode=ARPMessage::OPCODE_REQUEST;
+            arp_mess.sender_ip_address=_ip_address.ipv4_numeric();
+            arp_mess.sender_ethernet_address=_ethernet_address;
+            arp_mess.target_ip_address=next_hop_ip;
+            arp_mess.target_ethernet_address={};
 
-    DUMMY_CODE(dgram, next_hop, next_hop_ip);
+            //包装成以太网帧；
+            EthernetFrame ether_addr_frame;
+            ether_addr_frame.header()={ETHERNET_BROADCAST,_ethernet_address,EthernetHeader::TYPE_ARP};
+            ether_addr_frame.payload()=arp_mess.serialize();
+            _frames_out.push(ether_addr_frame);
+
+            wait_to_address.insert(next_hop_ip,wait_arp_ttl);
+        }
+        wait_to_ip_address.push_back({next_hop,dgram});
+    }else{
+        EthernetFrame ether_addr_frame;
+        ether_addr_frame.header()={it->second.ethernet_addrr,_ethernet_address,EthernetHeader::TYPE_IPv4};
+        ether_addr_frame.payload()=arp_mess.serialize();
+        _frames_out.push(ether_addr_frame);
+    }
 }
 
 //! \param[in] frame the incoming Ethernet frame

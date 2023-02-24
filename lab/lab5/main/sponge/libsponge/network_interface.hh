@@ -48,9 +48,9 @@ class NetworkInterface {
     };
     //arp表
     std::map<uint32_t ,arp> arp_table;
-    const table_default_time=1000*30;
+    const size_t table_default_time=1000*30;
     std::map<uint32_t,size_t>wait_to_address;
-    const wait_arp_ttl =1000*5;
+    const size_t wait_arp_ttl =1000*5;
     std::list<std::pair<Address,InternetDatagram>> wait_to_ip_address;  
     
     
