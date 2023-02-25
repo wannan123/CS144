@@ -100,7 +100,7 @@ optional<InternetDatagram> NetworkInterface::recv_frame(const EthernetFrame &fra
             message_reply.target_ethernet_address=ethernet_src;
 
             EthernetFrame frame_;
-            frame_.header()={ethernet_src,_ethernet_address,EthernetHeader::TYPE_IPv4};
+            frame_.header()={ethernet_src,_ethernet_address,EthernetHeader::TYPE_ARP};
             frame_.payload()=message_reply.serialize();
             _frames_out.push(frame_);
 
