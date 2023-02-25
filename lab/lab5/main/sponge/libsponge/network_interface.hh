@@ -33,6 +33,18 @@
 //! and learns or replies as necessary.
 class NetworkInterface {
   private:
+  struct arp
+    {
+        EthernetAddress ethernet_addrr;
+        size_t ttl; 
+    };
+    //arp表,uint32_t是ipv4地址
+    std::map<uint32_t ,arp> arp_table={};
+    const size_t table_default_time=1000*30;
+    std::map<uint32_t,size_t>wait_to_address={};
+    const size_t wait_arp_ttl =1000*5;
+    std::list<std::pair<Address,InternetDatagram>> wait_to_ip_address={};  
+
     //! Ethernet (known as hardware, network-access-layer, or link-layer) address of the interface
     EthernetAddress _ethernet_address;
 
@@ -41,17 +53,7 @@ class NetworkInterface {
 
     //! outbound queue of Ethernet frames that the NetworkInterface wants sent
     std::queue<EthernetFrame> _frames_out{};
-    struct arp
-    {
-        EthernetAddress ethernet_addrr;
-        size_t ttl; 
-    };
-    //arp表
-    std::map<uint32_t ,arp> arp_table;
-    const size_t table_default_time=1000*30;
-    std::map<uint32_t,size_t>wait_to_address;
-    const size_t wait_arp_ttl =1000*5;
-    std::list<std::pair<Address,InternetDatagram>> wait_to_ip_address;  
+
     
     
 
