@@ -8,7 +8,7 @@ OK，又是忙碌的一周，由于对于网络层和链路层的不熟悉，我
 
 本次lab是让你实现一个network接口，也就是相当于网络层和链路层的接口，将IPv4地址（网络层）转化为MAC地址（链路层）的协议（ARP协议），是一个很有意思的lab，由于Stanford以及提供好官方的IPv4地址和ARPMessage，以太网地址（MAC）的类分装，我们只需要实现ARP协议的接口即可，相对lab4会简单很多啦
 
-![](Lab4.assets/lab5.png)
+![](https://github.com/wannan123/CS144/blob/main/blob/main/lab0/main/note/picture/lab5.png)
 
 这是整个实验的大致图，我们本次实验实现的是对Internet datagrams（IP数据报）解析为Ethernet frames（以太网数据报）的接口，在实验前，我们需要了解一ARP协议以及IPv4数据报的结构。
 
@@ -22,7 +22,7 @@ OK，又是忙碌的一周，由于对于网络层和链路层的不熟悉，我
 
 没台主机或者路由都具备一个临时ARP表，上面相当于写好了局域网内各个IP对应MAC地址的一个集合，我们每次需要发送帧的时候需要查找ARP表如果在这个表上，我们直接用，如果不在表上，会进行一种Broadcast（广播）的操作，就相当于我们向多个主机询问IP以及MAC地址，然后去收集信息存到自己的表里。每个表里存放着目的IP地址，MAC地址，以及存活时间TTL（因为这是临时的表，所以需要）
 
-![](Lab4.assets/MAC.png)
+![](https://github.com/wannan123/CS144/blob/main/blob/main/lab0/main/note/picture/MAC.png)
 
 那么为什么需要有MAC地址呢？
 
