@@ -105,6 +105,7 @@ optional<InternetDatagram> NetworkInterface::recv_frame(const EthernetFrame &fra
             _frames_out.push(frame_);
 
         }
+        //更新arp_table表
         if(is_send_to_me ||is_respone){
             arp_table[ip_src]={ethernet_src,table_default_time};
             //删除wait里的
@@ -123,4 +124,36 @@ optional<InternetDatagram> NetworkInterface::recv_frame(const EthernetFrame &fra
 }
 
 //! \param[in] ms_since_last_tick the number of milliseconds since the last call to this method
-void NetworkInterface::tick(const size_t ms_since_last_tick) { DUMMY_CODE(ms_since_last_tick); }
+void NetworkInterface::tick(const size_t ms_since_last_tick) { 
+    DUMMY_CODE(ms_since_last_tick);
+    for(auto item=arp_table.begin();item!=arp_table.end();){
+        if(ms_since_last_tick>=item->second.ttl){
+            item=arp_table.erase(item);
+        }
+        else{
+            item->second.ttl-=ms_since_last_tick;
+            ++item;
+        }
+    }
+    for(auto item=wait_to_address.begin();item!=wait_to_address.end();){
+        if (ms_since_last_tick>=item->second)
+        {
+            ARPMessage messages_;
+            messages_.opcode=ARPMessage::OPCODE_REQUEST;
+            messages_.sender_ip_address=_ip_address.ipv4_numeric();
+            messages_.sender_ethernet_address=_ethernet_address;
+            messages_.target_ip_address=item->first;
+            messages_.target_ethernet_address={};
+
+            EthernetFrame frame_;
+            frame_.header()={ETHERNET_BROADCAST,_ethernet_address,EthernetHeader::TYPE_ARP};
+            frame_.payload()=messages_.serialize();
+            _frames_out.push(frame_);
+            item->second=wait_arp_ttl;
+        }
+        else{
+            item->second-=ms_since_last_tick;
+            ++item;
+        }
+    }
+}
